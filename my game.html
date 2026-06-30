@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Zombie Game</title>
+    <style>
+        body { margin: 0; background: #111; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; }
+        #canvasContainer { position: relative; }
+        #hud { position: absolute; top: 10px; left: 10px; color: white; font-size: 20px; font-weight: bold; pointer-events: none; }
+        canvas { background: #1a1a1a; border: 3px solid #4caf50; }
+    </style>
+</head>
+<body>
+
+    <div id="canvasContainer">
+        <div id="hud">KILLS: <span id="score">0</span></div>
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score');
+
+        // Player starting values
+        let playerX = 400;
+        let playerY = 300;
+        let score = 0;
+        let isDead = false;
+
+        // Arrays to hold bullets and zombies
+        let bullets = [];
+        let zombies = [];
+
+        // Track keys pressed
+        let keys = {};
+        window.onkeydown = function(e) { keys[e.key.toLowerCase()] = true; };
+        window.onkeyup = function(e) { keys[e.key.toLowerCase()] = false; };
+
+        // Track mouse position
+        let mouseX = 400;
+        let mouseY = 300;
+        canvas.onmousemove = function(e) {
+            let rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+        };
+
+        // Shoot when clicking
+        canvas.onmousedown = function() {
+            if (isDead) {
+                // Reset game if dead
+                playerX = 400;
+                playerY = 300;
+                score = 0;
+                bullets = [];
+                zombies = [];
+                isDead = false;
+                scoreDisplay.innerText = score;
+                return;
+            }
+
+            // Calculate shooting direction toward mouse
+            let dx = mouseX - playerX;
+            let dy = mouseY - playerY;
+            let distance = Math.sqrt(dx * dx + dy * dy);
+            
+            bullets.push({
+                x: playerX,
+                y: playerY,
+                vx: (dx / distance) * 8,
+                vy: (dy / distance) * 8
+            });
+        };
+
+        // Spawn one zombie every 1 second
+        setInterval(function() {
+            if (isDead) return;
+
+            // Pick a side of the screen to spawn from
+            let side = Math.floor(Math.random() * 4);
+            let zx, zy;
+
+            if (side === 0) { zx = Math.random() * 800; zy = -20; }       // Top
+            if (side === 1) { zx = 820; zy = Math.random() * 600; }       // Right
+            if (side === 2) { zx = Math.random() * 800; zy = 620; }       // Bottom
+            if (side === 3) { zx = -20; zy = Math.random() * 600; }       // Left
+
+            zombies.push({ x: zx, y: zy });
+        }, 1000);
+
+        // Main game logic and animation engine
+        function runGame() {
+            ctx.clearRect(0, 0, 800, 600);
+
+            if (!isDead) {
+                // 1. Move Player (WASD or Arrow Keys)
+                if (keys['w'] || keys['arrowup']) playerY -= 4;
+                if (keys['s'] || keys['arrowdown']) playerY += 4;
+                if (keys['a'] || keys['arrowleft']) playerX -= 4;
+                if (keys['d'] || keys['arrowright']) playerX += 4;
+
+                // Keep player inside screen box limits
+                if (playerX < 15) playerX = 15;
+                if (playerX > 785) playerX = 785;
+                if (playerY < 15) playerY = 15;
+                if (playerY > 585) playerY = 585;
+
+                // 2. Update and Draw Bullets
+                for (let i = bullets.length - 1; i >= 0; i--) {
+                    let b = bullets[i];
+                    b.x += b.vx;
+                    b.y += b.vy;
+
+                    // Draw bullet circle
+                    ctx.fillStyle = '#ffeb3b';
+                    ctx.beginPath();
+                    ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Remove out of bounds bullets
+                    if (b.x < 0 || b.x > 800 || b.y < 0 || b.y > 600) {
+                        bullets.splice(i, 1);
+                    }
+                }
+
+                // 3. Update and Draw Zombies
+                for (let i = zombies.length - 1; i >= 0; i--) {
+                    let z = zombies[i];
+
+                    // Track directly toward player position coordinates
+                    let dx = playerX - z.x;
+                    let dy = playerY - z.y;
+                    let distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    z.x += (dx / distance) * 2;
+                    z.y += (dy / distance) * 2;
+
+                    // Draw zombie circle
+                    ctx.fillStyle = '#4caf50';
+                    ctx.beginPath();
+                    ctx.arc(z.x, z.y, 14, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Check bullet hit collision against zombie box
+                    for (let j = bullets.length - 1; j >= 0; j--) {
+                        let b = bullets[j];
+                        let bDistX = b.x - z.x;
+                        let bDistY = b.y - z.y;
+                        let bulletDistance = Math.sqrt(bDistX * bDistX + bDistY * bDistY);
+
+                        if (bulletDistance < 18) {
+                            zombies.splice(i, 1);
+                            bullets.splice(j, 1);
+                            score += 1;
+                            scoreDisplay.innerText = score;
+                            break;
+                        }
+                    }
+
+                    // Check if zombie touches player (Death condition trigger)
+                    if (distance < 29) {
+                        isDead = true;
+                    }
+                }
+
+                // 4. Draw Player Character Shape
+                ctx.fillStyle = '#2196f3';
+                ctx.beginPath();
+                ctx.arc(playerX, playerY, 15, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                // Game Over Screen Draw Slate
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                ctx.fillRect(0, 0, 800, 600);
+                
+                ctx.fillStyle = '#ff3333';
+                ctx.font = 'bold 40px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('GAME OVER', 400, 280);
+
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '20px Arial';
+                ctx.fillText('Click anywhere to play again', 400, 340);
+            }
+
+            requestAnimationFrame(runGame);
+        }
+
+        // Boot up game sequence
+        runGame();
+    </script>
+</body>
+</html>
